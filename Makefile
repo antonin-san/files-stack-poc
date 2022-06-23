@@ -19,3 +19,8 @@ logs: ## Show logs of the development environment
 .PHONY: stop
 down: ## Stop the development environment
 	$(dc) down
+
+.PHONY: dev
+dev: ## Run dev env os proof
+	@make up
+	@cd frontend && yarn dev
