@@ -1,116 +1,70 @@
-import axios from "axios";
-import SparkMD5 from "spark-md5";
-import Q from "q";
 import React, { Component } from "react";
+
 class App extends Component {
-   calculateMD5Hash(file, bufferSize) {
-    var def = Q.defer();
-  
-    var fileReader = new FileReader();
-    var fileSlicer = File.prototype.slice || File.prototype.mozSlice || File.prototype.webkitSlice;
-    var hashAlgorithm = new SparkMD5();
-    var totalParts = Math.ceil(file.size / bufferSize);
-    var currentPart = 0;
-    var startTime = new Date().getTime();
-  
-    fileReader.onload = function(e) {
-      currentPart += 1;
-  
-      def.notify({
-        currentPart: currentPart,
-        totalParts: totalParts
-      });
-  
-      var buffer = e.target.result;
-      hashAlgorithm.appendBinary(buffer);
-  
-      if (currentPart < totalParts) {
-        processNextPart();
-        return;
-      }
-  
-      def.resolve({
-        hashResult: hashAlgorithm.end(),
-        duration: new Date().getTime() - startTime
-      });
-    };
-  
-    fileReader.onerror = function(e) {
-      def.reject(e);
-    };
-  
-    function processNextPart() {
-      var start = currentPart * bufferSize;
-      var end = Math.min(start + bufferSize, file.size);
-      fileReader.readAsBinaryString(fileSlicer.call(file, start, end));
-    }
-  
-    processNextPart();
-    return def.promise;
-  }
-     
   state = {
-    // Initially, no file is selected
-    selectedFile: null,
-    fileHash: "0x00"
+    files: null,
   };
 
-  // On file select (from the pop up)
   onFileChange = (event) => {
-    // Update the state
-    this.setState({ selectedFile: event.target.files[0] });
+    this.setState({ files: event.target.files });
   };
 
-  // On file upload (click the upload button)
-  onFileUpload = () => {
-    // Create an object of formData
-    const formData = new FormData();
+  // to generate test files `for i in $(seq 1 10000); do fallocate -l 1M avatar_$i.png ; done` (10k files = 10G)
+  // https://w3c.github.io/FileAPI/#dfn-type -> to understand File API
+  // TODO: break limits, 2G per file and with 10k file we have a timeout caused by the hash handler
+  hash(blob) {
+    return new Promise((resolve, reject) => {
+      const fileReader = new FileReader();
 
-    // Update the formData object
-    formData.append(
-      "file",
-      this.state.selectedFile,
-      this.state.selectedFile.name
-    );
+      // Hash handler
+      fileReader.addEventListener("load", () => {
+        // https://caniuse.com/cryptography
+        crypto.subtle.digest("SHA-1", fileReader.result).then((buffer) => {
+          const typedArray = new Uint8Array(buffer);
+          resolve(
+            Array.prototype.map
+              .call(typedArray, (x) => ("00" + x.toString(16)).slice(-2))
+              .join("")
+          );
+        });
+      });
 
-    // Details of the uploaded file
-    console.log(this.state.selectedFile);
+      // Error handler
+      fileReader.addEventListener("error", () => {
+        reject(fileReader.error);
+      });
 
-    axios.post("http://localhost:8080/upload", formData);
-  };
+      // Read the file locally
+      fileReader.readAsArrayBuffer(blob);
+    });
+  }
 
-  // File content to be displayed after
-  // file upload is complete
-  fileData = () => {
+  computeHash = async (event) => {
+    const startTime = Date.now();
+    event.preventDefault();
 
-    if (this.state.selectedFile) {
-      var file = this.state.selectedFile;
-      var bufferSize = Math.pow(1024, 2) * 10; // 10MB
-    
-      this.calculateMD5Hash(file, bufferSize).then(res => {
-      this.setState({ ...this.state, fileHash: res.hashResult });
-    })
+    const filteredFiles = {};
 
-      return (
-        <div>
-          <h2>File Details:</h2>
-          <p>File Name: {this.state.selectedFile.name}</p>
-          <p>File Type: {this.state.selectedFile.type}</p>
-          <p>File Hash: {this.state.fileHash}</p>
-          <p>
-            Last Modified:{" "}
-            {this.state.selectedFile.lastModifiedDate.toDateString()}
-          </p>
-        </div>
-      );
-    } else {
-      return (
-        <div>
-          <br />
-          <h4>Choose before Pressing the Upload button</h4>
-        </div>
-      );
-    }
+    Object.values(this.state.files).forEach(async (file) => {
+      const hash = await this.hash(file);
+
+      if (filteredFiles[hash]) {
+        filteredFiles[hash] = {
+          names: [file.name, ...filteredFiles[hash].names],
+          count: filteredFiles[hash].count + 1,
+        };
+      } else {
+        filteredFiles[hash] = {
+          names: [file.name],
+          count: 1,
+        };
+      }
+    });
+
+    const endTime = Date.now();
+
+    console.log(`Time taken: ${endTime - startTime}ms`);
+    console.log(filteredFiles);
   };
 
   render() {
@@ -119,10 +73,15 @@ class App extends Component {
         <h1>Upload</h1>
         <h3>File Upload using React!</h3>
         <div>
-          <input type="file" onChange={this.onFileChange} />
-          <button onClick={this.onFileUpload}>Upload!</button>
+          <input
+            type="file"
+            id="files"
+            name="files"
+            multiple
+            onChange={this.onFileChange}
+          />
+          <button onClick={this.computeHash}>Hash</button>
         </div>
-        {this.fileData()}
       </div>
     );
   }
