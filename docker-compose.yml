@@ -1,0 +1,39 @@
+version: "3.8"
+services:
+  backend:
+    image: node:16-bullseye
+    container_name: "backend"
+    ports:
+      - 3001:3000
+    user: "${UID}:${GID}"
+    volumes:
+      - ./backend:/app
+    command: ["yarn", "--cwd", "/app", "start:dev"]
+    networks:
+      - "kanji-cluster"
+  frontend:
+    image: node:16-bullseye
+    container_name: "frontend"
+    ports:
+      - 3000:3000
+    user: "${UID}:${GID}"
+    volumes:
+      - ./frontend:/app
+    command: ["yarn", "--cwd", "/app", "dev"]
+    networks:
+      - "kanji-cluster"
+  server:
+    depends_on:
+      - frontend
+      - backend
+    image: nginx
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    command: [nginx-debug, '-g', 'daemon off;']
+    ports:
+      - 8080:80
+    networks:
+      - "kanji-cluster"
+networks:
+  kanji-cluster:
+    driver: bridge
