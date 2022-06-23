@@ -4,11 +4,11 @@ services:
     image: node:16-bullseye
     container_name: "backend"
     ports:
-      - 3001:3000
+      - 3001:3001
     user: "${UID}:${GID}"
     volumes:
       - ./backend:/app
-    command: ["yarn", "--cwd", "/app", "start:prod" , "2>", "/dev/null"]
+    command: ["yarn", "--cwd", "/app", "start:dev"]
     networks:
       - "kanji-cluster"
   frontend:
@@ -22,13 +22,25 @@ services:
     command: ["yarn", "--cwd", "/app", "dev"]
     networks:
       - "kanji-cluster"
-  server:
+  server-backend:
     depends_on:
       - frontend
       - backend
     image: nginx
     volumes:
-      - ./default.conf:/etc/nginx/conf.d/default.conf
+      - ./backend.conf:/etc/nginx/conf.d/default.conf
+    command: [nginx-debug, '-g', 'daemon off;']
+    ports:
+      - 8081:80
+    networks:
+      - "kanji-cluster"
+  server-frontend:
+    depends_on:
+      - frontend
+      - backend
+    image: nginx
+    volumes:
+      - ./frontend.conf:/etc/nginx/conf.d/default.conf
     command: [nginx-debug, '-g', 'daemon off;']
     ports:
       - 8080:80
