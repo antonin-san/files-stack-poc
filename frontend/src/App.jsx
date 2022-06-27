@@ -1,4 +1,7 @@
 import React, { Component } from "react";
+import { CarSplitter } from "carbites";
+import { CarReader } from "@ipld/car/reader";
+import * as dagCbor from "@ipld/dag-cbor";
 
 class App extends Component {
   state = {
@@ -19,7 +22,7 @@ class App extends Component {
       // Hash handler
       fileReader.addEventListener("load", () => {
         // https://caniuse.com/cryptography
-        crypto.subtle.digest("SHA-1", fileReader.result).then((buffer) => {
+        crypto.subtle.digest("SHA-256", fileReader.result).then((buffer) => {
           const typedArray = new Uint8Array(buffer);
           resolve(
             Array.prototype.map
@@ -43,28 +46,62 @@ class App extends Component {
     const startTime = Date.now();
     event.preventDefault();
 
-    const filteredFiles = {};
+    /*const filteredFiles = {};
 
-    Object.values(this.state.files).forEach(async (file) => {
-      const hash = await this.hash(file);
+    const hashFile = (file) => {
+      return new Promise(async (resolve)=> {
+        const hash = await this.hash(file);
 
-      if (filteredFiles[hash]) {
-        filteredFiles[hash] = {
-          names: [file.name, ...filteredFiles[hash].names],
-          count: filteredFiles[hash].count + 1,
-        };
-      } else {
-        filteredFiles[hash] = {
-          names: [file.name],
-          count: 1,
-        };
-      }
+        if (filteredFiles[hash]) {
+          filteredFiles[hash] = {
+            names: [file.name, ...filteredFiles[hash].names],
+            count: filteredFiles[hash].count + 1,
+          };
+        } else {
+          filteredFiles[hash] = {
+            names: [file.name],
+            count: 1,
+          };
+        }
+
+        resolve('ok')
+      })
+    }
+
+    const promises = Object.values(this.state.files).map(file=> {
+      return hashFile(file)
     });
+
+    await Promise.all(promises)*/
+
+    const targetSize = 1024 * 1024 * 100; // chunk to ~100MB CARs
+
+    // MON GROS CAR FILE 1
+    const blob = this.state.files[0];
+
+    // JE LE SPLIT
+    const car = await CarSplitter.fromBlob(blob, targetSize);
+
+    console.log(car);
+
+    const carPartsFiles = [];
+    for await (const part of car.cars()) {
+      const carParts = [];
+      for await (const e of part) {
+        carParts.push(e)
+      }
+      carPartsFiles.push(new Blob(carParts, { type: "application/car" }));
+    }
+
+    console.log(carPartsFiles);
+
+    //const carFile = new Blob(carParts, { type: "application/car" });
+    //console.log("CAR FILE", carFile);
 
     const endTime = Date.now();
 
     console.log(`Time taken: ${endTime - startTime}ms`);
-    console.log(filteredFiles);
+    //console.log(filteredFiles);
   };
 
   render() {
